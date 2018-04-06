@@ -115,7 +115,7 @@ def CollectCpuStatsAll(regions, accessKey, secretAccess):
                             'InstanceId': instance['InstanceId'],
                             'InstanceType': instance['InstanceType'],
                             'State': instance['State'],
-                            'Tags': instance['Tags']}
+                            'Tags': instance['Tags'] if 'Tags' in instance else []}
                     ec2['Stats'] = CollectCpuStats(cw, instance['InstanceId'], days, period)
                     instances['Instances'].append(ec2)
     return instances
