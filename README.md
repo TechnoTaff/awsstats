@@ -1,4 +1,4 @@
-# awsstats
+# AWS Ec2 rightsizing and utilization efficiency measurement
 This tool collects AWS EC2 Cloudwatch stats of all EC2 instances in selected regions for the last two weeks and save them to a json file with a name such as ec2stats-2018-02-15.json.
 
     python e2stats.py -k YOUR_ACCESS_KEY -s YOUR_SECRET_ACCESS_KEY
