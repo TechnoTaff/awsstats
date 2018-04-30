@@ -260,7 +260,7 @@ def AnalyzeStats(instances, url, quiet, threshold):
     instances['Threshold']['Avg'] = int(threshold[0])
     instances['Threshold']['Max'] = int(threshold[1])
     compressed = GzipStats(instances)
-    response = requests.post(url, data=compressed, headers=headers, verify=True)
+    response = requests.post(url, data=compressed, headers=headers, verify=False)
     result = response.json()
     SaveObject(result, 'ec2summary', False)
     if not quiet:
