@@ -26,8 +26,6 @@ import argparse
 import boto3
 import botocore
 import requests
-import StringIO
-import gzip
 from hashlib import sha256
 import logging
 from ConfigParser import SafeConfigParser
@@ -129,7 +127,7 @@ def DatetimeConverter(t):
     if isinstance(t, datetime.datetime):
         return t.__str__()
 
-def SaveObject(obj, prefix, compressed=True):
+def SaveObject(obj, prefix):
     '''
     Save object as json file
     :param obj: object
@@ -137,18 +135,13 @@ def SaveObject(obj, prefix, compressed=True):
     '''
     if not obj:
         return
-    suffix = '.json.gz' if compressed else '.json'
-    fileName = prefix + '-' + arrow.utcnow().strftime("%Y-%m-%d") + suffix
-    try:
-        if compressed:
-            with gzip.open(fileName, 'wb') as fp:
-                json.dump(obj, fp, default=DatetimeConverter)
-        else:
-            with open(fileName, 'w') as fp:
-                json.dump(obj, fp, default=DatetimeConverter)
-        print("%s saved to %s" %(prefix, fileName))
-    except:
-        logger.exception("Failed to write result to file")
+    fileName = prefix + '-' + arrow.utcnow().strftime("%Y-%m-%d") + '.json'
+    with open(fileName, 'w') as fp:
+        try:
+            json.dump(obj, fp, default=DatetimeConverter)
+            print("%s saved to %s" %(prefix, fileName))
+        except:
+            logger.exception("Failed to write result to file")
 
 def PrintInstanceRegions(summary):
     if 'Regions' not in summary:
@@ -241,13 +234,6 @@ def PrintSummary(result):
     PrintEfficiency(summary)
     PrintUnderUtilized(summary)
 
-def GzipStats(instances):
-    s = json.dumps(instances,default=DatetimeConverter)
-    out = StringIO.StringIO()
-    with gzip.GzipFile(fileobj=out, mode="w") as f:
-      f.write(s)
-    return out.getvalue()
-
 def AnalyzeStats(instances, url, quiet, threshold):
     '''
     Send stats to server and get save result.
@@ -256,13 +242,12 @@ def AnalyzeStats(instances, url, quiet, threshold):
     :param quiet: not to print result on screen
     '''
     print("Analyzing stats ...")
-    headers = {'Content-type': 'application/json', 'content-encoding': 'gzip'}
+    headers = {'Content-type': 'application/json'}
     instances['Threshold']['Avg'] = int(threshold[0])
     instances['Threshold']['Max'] = int(threshold[1])
-    compressed = GzipStats(instances)
-    response = requests.post(url, data=compressed, headers=headers, verify=False)
+    response = requests.post(url, data=json.dumps(instances,default=DatetimeConverter), headers=headers, verify=True)
     result = response.json()
-    SaveObject(result, 'ec2summary', False)
+    SaveObject(result, 'ec2summary')
     if not quiet:
         PrintSummary(result)
 
@@ -273,11 +258,9 @@ def LoadStatsFile(fileName):
     :return:
     '''
     try:
-        if fileName.endswith('.gz'):
-            instances = json.load(gzip.GzipFile(fileName, 'rb'))
-        else:
-            with open(fileName) as f:
-                instances = json.load(f)
+        with open(fileName) as f:
+            instances = json.load(f)
+            f.close()
     except:
         logger.exception("Failed to open %s" %fileName)
         return []
