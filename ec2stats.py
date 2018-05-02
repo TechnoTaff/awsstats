@@ -28,6 +28,7 @@ import botocore
 import requests
 import StringIO
 import gzip
+from os.path import expanduser
 from hashlib import sha256
 import logging
 from ConfigParser import SafeConfigParser
@@ -298,6 +299,8 @@ def GetCredential(args):
         configFile = os.path.join(args.configPath, 'credentials')
     else:
         configFile = os.path.abspath(os.path.join(os.path.dirname(__file__), '.botoconfig', 'credentials'))
+        if not os.path.isfile(configFile):
+            configFile = os.path.join(expanduser("~"), '.aws', 'credentials')
         
     parser = SafeConfigParser()
     try:
