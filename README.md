@@ -55,6 +55,7 @@ Other options:
     -t 5 10: Return under-utilized instance with Average CPU <= 5% and Maximum CPU <= 10%
     -c C:\Users\Bezos\.aws: Parent directory of aws config
     -p dev: profile
+    --govcloud: Flag to enable AWS GovCloud support
 
 Here is example of the result of the analysis:
 
