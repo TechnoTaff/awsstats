@@ -24,7 +24,6 @@ import datetime
 import arrow
 import argparse
 import boto3
-import botocore
 import requests
 import StringIO
 import gzip
