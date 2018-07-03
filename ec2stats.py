@@ -24,7 +24,6 @@ import datetime
 import arrow
 import argparse
 import boto3
-import botocore
 import requests
 import StringIO
 import gzip
@@ -39,13 +38,16 @@ logger = logging.getLogger(__name__)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger("botocore").setLevel(logging.WARNING)
 
-REGION_LIST = [
+COMMERCIAL_REGION_LIST = [
     'us-east-1',       # US East (N. Virginia)
     'us-west-2',       # US West (Oregon)
     'us-west-1',       # US West (N. California)
     'us-east-2',       # US East (Ohio)
-    'us-gov-west-1'    # US GovCloud West (Northeast)
     ]
+
+GOVCLOUD_REGION_LIST = [
+    'us-gov-west-1'    # US GovCloud (Northwest)
+]
 
 SERVER_URL = 'https://customer.fittedcloud.com/v1/ec2stats'    
 
@@ -68,20 +70,25 @@ def CollectCpuStats(cw, instanceId, days, period):
     sTime = now.replace(days=-days).strftime("%Y-%m-%d %H:%M:%S")
 
     try:                                
-        res = cw.get_metric_statistics(Namespace='AWS/EC2',
-                                       MetricName='CPUUtilization',
-                                       Dimensions=[{'Name': 'InstanceId', 'Value': instanceId}],
-                                       StartTime=sTime,
-                                       EndTime=eTime,
-                                       Period=period,
-                                       Statistics=['Average', 'Maximum'],
-                                       Unit='Percent')
+        res = cw.get_metric_statistics(
+            Namespace='AWS/EC2',
+            MetricName='CPUUtilization',
+            Dimensions=[{'Name': 'InstanceId', 'Value': instanceId}],
+            StartTime=sTime,
+            EndTime=eTime,
+            Period=period,
+            Statistics=['Average', 'Maximum'],
+            Unit='Percent')
+
     except ClientError as e:
-        logger.error("Failed to call get_metric_statistics %s" %(e.response['Error']['Message']))
+        logger.error("Failed to call get_metric_statistics {}".format(
+            e.response['Error']['Message']))
         return []
+
     except:
         logger.exception("Failed to call get_metric_statistics")
         return []
+
     return res
 
 
@@ -90,45 +97,66 @@ def CollectCpuStatsAll(regions, accessKey, secretAccess):
     :param regions: list of regions
     :param accessKey: access key
     :param secretAccess: secret access key
+    :param gov: boolean representation to enable GovCloud support
     :return: list of instances along with cloudwatch stats
     """
     instances = {'Instances':[], 'OwnerId':'', 'Threshold':{'Avg':5, 'Max':30}}
+
     for region in regions:
         try:
-            print("Collecting stats in %s ..." %region)
-            ec2Client = boto3.client('ec2', aws_access_key_id=accessKey, aws_secret_access_key=secretAccess, region_name=region)
-            cw = boto3.client('cloudwatch', region_name=region, aws_access_key_id=accessKey, aws_secret_access_key=secretAccess)
+            print("Collecting stats in {} ...".format(region))
+            ec2Client = boto3.client(
+                'ec2',
+                aws_access_key_id=accessKey,
+                aws_secret_access_key=secretAccess,
+                region_name=region)
+            cw = boto3.client(
+                'cloudwatch',
+                region_name=region,
+                aws_access_key_id=accessKey,
+                aws_secret_access_key=secretAccess)
+
         except ClientError as e:
-            logger.error("Failed to connect %s" %(e.response['Error']['Message']))
+            logger.error("Failed to connect {}".format(
+                e.response['Error']['Message']))
             return []
+
         except:
             logger.exception("Failed to connect")
             return []
 
         try:
-            response = ec2Client.describe_instances(DryRun = False, InstanceIds=[], Filters=[])
+            response = ec2Client.describe_instances(
+                DryRun=False,
+                InstanceIds=[],
+                Filters=[])
+
         except ClientError as e:
-            logger.error("Failed to call describe instances %s" %(e.response['Error']['Message']))
+            logger.error("Failed to call describe instances {}".format(
+                e.response['Error']['Message']))
             return []
+
         except:
             logger.exception("Failed to call get_metric_statistics")
             return []
 
-        for reservation in response['Reservations']:
+        for res in response['Reservations']:
             if not instances['OwnerId']:
-                instances['OwnerId'] = sha256(reservation['OwnerId'] if 'OwnerId' in reservation else '0').hexdigest()[:16]
-                
-            for instance in reservation['Instances']:
-                instanceState = instance['State']
+                instances['OwnerId'] = sha256(
+                    res['OwnerId'] if 'OwnerId' in res else '0').hexdigest()[:16]
+
+            for inst in res['Instances']:
+                instanceState = inst['State']
                 if instanceState['Name'] != 'terminated':
-                    ec2 = { 'Region':region,
-                            'InstanceId': instance['InstanceId'],
-                            'InstanceType': instance['InstanceType'],
-                            'State': instance['State'],
-                            'Tags': instance['Tags'] if 'Tags' in instance else []}
-                    ec2['Stats'] = CollectCpuStats(cw, instance['InstanceId'], days, period)
+                    ec2 = { 'Region': region,
+                            'InstanceId': inst['InstanceId'],
+                            'InstanceType': inst['InstanceType'],
+                            'State': inst['State'],
+                            'Tags': inst['Tags'] if 'Tags' in inst else []}
+                    ec2['Stats'] = CollectCpuStats(cw, inst['InstanceId'], days, period)
                     instances['Instances'].append(ec2)
-    return instances
+
+        return instances
 
 
 def DatetimeConverter(t):
@@ -186,7 +214,7 @@ def PrintInstanceTypes(summary):
     s = ''
     for i, t in enumerate(sorted(instanceTypes, key=lambda x: x[1], reverse=True)):
         s += ("{:10s}:{:4s}".format(t[0], t[1]))
-        if i != 0 and i%4 == 0:
+        if i != 0 and i % 4 == 0:
             print("{}".format(s))
             s = ''
         else:
@@ -199,7 +227,8 @@ def PrintEfficiency(summary):
     if 'Efficiency' not in summary:
         return
     efficiency = summary['Efficiency']
-    print("\n{0}   Efficiency Compared to Users with Monthy Spending Around ${1:10s}{2}".format('-'*11, efficiency['CostLevel'], '-'*11))
+    print("\n{0}   Efficiency Compared to Users with Monthy Spending Around ${1:10s}{2}".format(
+        '-'*11, efficiency['CostLevel'], '-'*11))
     efficiencies = []
     efficiencies.append(['Average', efficiency['Average']])
     efficiencies.append(['Efficient Users', efficiency['Efficient']])
@@ -217,7 +246,9 @@ def PrintUnderUtilized(summary):
     if 'UnderUtilized' not in summary:
         return
     underutilized = summary['UnderUtilized']
-    print("\n{0}Under-Utilized Instances: Avg<={1}%, Max<={2}%{3}".format('-'*25, summary['Threshold']['Avg'], summary['Threshold']['Max'], '-'*24))
+    print("\n{0}Under-Utilized Instances: Avg<={1}%, Max<={2}%{3}".format(
+        '-'*25, summary['Threshold']['Avg'], summary['Threshold']['Max'], '-'*24)
+    )
     s = ''
     for i in underutilized:
         print("{:20s}:{:10s}".format(i[0], i[1]))
@@ -338,15 +369,26 @@ def GetCredential(args):
 
 def ParseArgs(arg):
     parser = argparse.ArgumentParser()
-    parser.add_argument("-k", "--access_key", dest="accessKey", help="access key", default='', required=False)
-    parser.add_argument("-s", "--secret_key", dest="secretAccess", help="secret access key", default='', required=False)
-    parser.add_argument("-u", "--url", dest="url", help="api server url", default=SERVER_URL, required=False)
-    parser.add_argument("--noanalysis", help="skip analysis", action="store_true")
-    parser.add_argument("-l", "--load_stats", dest="loadStats", help="stats file name to load data from", default='', required=False)
-    parser.add_argument("--quiet", help="no printing summary", action="store_true")
-    parser.add_argument("-t", "--threshold", dest="threshold", help="[average, max] CPU threshold ", nargs=2, default=[5,30], required=False)
-    parser.add_argument("-c", "--config_path", dest="configPath", help="Parent path to config file", default='', required=False)
-    parser.add_argument("-p", "--profile", dest="profile", help="AWS credential profile", default='default', required=False)
+    parser.add_argument(
+        "-k", "--access_key", dest="accessKey", help="access key", default='', required=False)
+    parser.add_argument(
+        "-s", "--secret_key", dest="secretAccess", help="secret access key", default='', required=False)
+    parser.add_argument(
+        "-u", "--url", dest="url", help="api server url", default=SERVER_URL, required=False)
+    parser.add_argument(
+        "--noanalysis", help="skip analysis", action="store_true")
+    parser.add_argument(
+        "-l", "--load_stats", dest="loadStats", help="stats file name to load data from", default='', required=False)
+    parser.add_argument(
+        "--quiet", help="no printing summary", action="store_true")
+    parser.add_argument(
+        "-t", "--threshold", dest="threshold", help="[average, max] CPU threshold ", nargs=2, default=[5,30], required=False)
+    parser.add_argument(
+        "-c", "--config_path", dest="configPath", help="Parent path to config file", default='', required=False)
+    parser.add_argument(
+        "-p", "--profile", dest="profile", help="AWS credential profile", default='default', required=False)
+    parser.add_argument(
+        "--govcloud", help="enable GovCloud support", action="store_true")
     args = parser.parse_args()
     return args        
         
@@ -357,11 +399,15 @@ if __name__ == "__main__":
 
     if args.loadStats:
         instances = LoadStatsFile(args.loadStats)
+    elif args.govcloud:
+        accessKey, secretAccess = GetCredential(args)
+        instances = CollectCpuStatsAll(GOVCLOUD_REGION_LIST, accessKey, secretAccess)
+        SaveObject(instances, 'ec2stats')
     else:
         accessKey, secretAccess = GetCredential(args)
-        instances = CollectCpuStatsAll(REGION_LIST, accessKey, secretAccess)
+        instances = CollectCpuStatsAll(COMMERCIAL_REGION_LIST, accessKey, secretAccess)
         SaveObject(instances, 'ec2stats')
-        
+
     if not args.noanalysis:
         AnalyzeStats(instances, args.url, args.quiet, args.threshold)
     
