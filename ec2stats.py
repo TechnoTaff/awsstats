@@ -28,6 +28,7 @@ import botocore
 import requests
 import StringIO
 import gzip
+from botocore.exceptions import ClientError
 from os.path import expanduser
 from hashlib import sha256
 import logging
@@ -53,13 +54,13 @@ period = 900    # 15 minutes
 
 
 def CollectCpuStats(cw, instanceId, days, period):
-    '''
+    """
     :param cw: cloudwatch connection
     :param instanceId: ec2 instance id
     :param days: number of days to collect stats
     :param period: time in seconds between each sample
     :return: raw cloudwatch metric data
-    '''
+    """
     now = arrow.utcnow()
     now = now.replace(minute=(now.minute/(period/60)*(period/60)), second=0)
     eTime = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -74,7 +75,7 @@ def CollectCpuStats(cw, instanceId, days, period):
                                        Period=period,
                                        Statistics=['Average', 'Maximum'],
                                        Unit='Percent')
-    except botocore.exceptions.ClientError as e:
+    except ClientError as e:
         logger.error("Failed to call get_metric_statistics %s" %(e.response['Error']['Message']))
         return []
     except:
@@ -84,19 +85,19 @@ def CollectCpuStats(cw, instanceId, days, period):
 
 
 def CollectCpuStatsAll(regions, accessKey, secretAccess):
-    '''
+    """
     :param regions: list of regions
     :param accessKey: access key
     :param secretAccess: secret access key
     :return: list of instances along with cloudwatch stats
-    '''
+    """
     instances = {'Instances':[], 'OwnerId':'', 'Threshold':{'Avg':5, 'Max':30}}
     for region in regions:
         try:
             print("Collecting stats in %s ..." %region)
             ec2Client = boto3.client('ec2', aws_access_key_id=accessKey, aws_secret_access_key=secretAccess, region_name=region)
             cw = boto3.client('cloudwatch', region_name=region, aws_access_key_id=accessKey, aws_secret_access_key=secretAccess)
-        except botocore.exceptions.ClientError as e:
+        except ClientError as e:
             logger.error("Failed to connect %s" %(e.response['Error']['Message']))
             return []
         except:
@@ -105,7 +106,7 @@ def CollectCpuStatsAll(regions, accessKey, secretAccess):
 
         try:
             response = ec2Client.describe_instances(DryRun = False, InstanceIds=[], Filters=[])
-        except botocore.exceptions.ClientError as e:
+        except ClientError as e:
             logger.error("Failed to call describe instances %s" %(e.response['Error']['Message']))
             return []
         except:
@@ -130,19 +131,19 @@ def CollectCpuStatsAll(regions, accessKey, secretAccess):
 
 
 def DatetimeConverter(t):
-    '''
+    """
     Serialize datetime object in stats
-    '''
+    """
     if isinstance(t, datetime.datetime):
         return t.__str__()
 
 
 def SaveObject(obj, prefix, compressed=True):
-    '''
+    """
     Save object as json file
     :param obj: object
     :param prefix: prefix for file
-    '''
+    """
     if not obj:
         return
     suffix = '.json.gz' if compressed else '.json'
@@ -264,12 +265,12 @@ def GzipStats(instances):
 
 
 def AnalyzeStats(instances, url, quiet, threshold):
-    '''
+    """
     Send stats to server and get save result.
     :param instances: ec2 instances with stats
     :param url: server address
     :param quiet: not to print result on screen
-    '''
+    """
     print("Analyzing stats ...")
     headers = {'Content-type': 'application/json', 'content-encoding': 'gzip'}
     instances['Threshold']['Avg'] = int(threshold[0])
@@ -283,11 +284,11 @@ def AnalyzeStats(instances, url, quiet, threshold):
 
 
 def LoadStatsFile(fileName):
-    '''
+    """
     Load existing stats file
     :param fileName:
     :return:
-    '''
+    """
     try:
         if fileName.endswith('.gz'):
             instances = json.load(gzip.GzipFile(fileName, 'rb'))
@@ -301,11 +302,11 @@ def LoadStatsFile(fileName):
 
 
 def GetCredential(args):
-    '''
+    """
     Try get get credential from 1. command args, 2. botoconfig, 3. user input.
     :param args: command line args
     :return: access_key and secret_access_key
-    '''
+    """
     accessKey, secretAccess = args.accessKey, args.secretAccess
     if accessKey and secretAccess:
         return accessKey, secretAccess
