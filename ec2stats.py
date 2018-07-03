@@ -44,6 +44,7 @@ REGION_LIST = [
     'us-west-2',       # US West (Oregon)
     'us-west-1',       # US West (N. California)
     'us-east-2',       # US East (Ohio)
+    'us-gov-west-1'    # US GovCloud West (Northeast)
     ]
 
 SERVER_URL = 'https://customer.fittedcloud.com/v1/ec2stats'    
@@ -120,7 +121,7 @@ def CollectCpuStatsAll(regions, accessKey, secretAccess):
             for instance in reservation['Instances']:
                 instanceState = instance['State']
                 if instanceState['Name'] != 'terminated':
-                    ec2 = { 'Region':region, 
+                    ec2 = { 'Region':region,
                             'InstanceId': instance['InstanceId'],
                             'InstanceType': instance['InstanceType'],
                             'State': instance['State'],
