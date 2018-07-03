@@ -141,3 +141,16 @@ Here is example of the result of the analysis:
       ]
     }  
 ```
+
+# Installation
+
+This tool was written in python2.X, and therefore, must be run with python2.X.
+
+It is recommended that you run this tool and install it's requirements under a virtual environment. To do this, use the following commands:
+
+```
+pip install -U virtualenv
+virtualenv -p python2.7 venv
+. ./venv/bin/activate
+pip install -r requirements.txt
+```
