@@ -28,6 +28,7 @@ import botocore
 import requests
 import StringIO
 import gzip
+from botocore.exceptions import ClientError
 from os.path import expanduser
 from hashlib import sha256
 import logging
@@ -43,19 +44,24 @@ REGION_LIST = [
     'us-west-2',       # US West (Oregon)
     'us-west-1',       # US West (N. California)
     'us-east-2',       # US East (Ohio)
+    'us-gov-west-1'    # US GovCloud West (Northeast)
     ]
+
 SERVER_URL = 'https://customer.fittedcloud.com/v1/ec2stats'    
+
 days = 14
+
 period = 900    # 15 minutes
 
+
 def CollectCpuStats(cw, instanceId, days, period):
-    '''
+    """
     :param cw: cloudwatch connection
     :param instanceId: ec2 instance id
     :param days: number of days to collect stats
     :param period: time in seconds between each sample
     :return: raw cloudwatch metric data
-    '''
+    """
     now = arrow.utcnow()
     now = now.replace(minute=(now.minute/(period/60)*(period/60)), second=0)
     eTime = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -70,7 +76,7 @@ def CollectCpuStats(cw, instanceId, days, period):
                                        Period=period,
                                        Statistics=['Average', 'Maximum'],
                                        Unit='Percent')
-    except botocore.exceptions.ClientError as e:
+    except ClientError as e:
         logger.error("Failed to call get_metric_statistics %s" %(e.response['Error']['Message']))
         return []
     except:
@@ -78,20 +84,21 @@ def CollectCpuStats(cw, instanceId, days, period):
         return []
     return res
 
+
 def CollectCpuStatsAll(regions, accessKey, secretAccess):
-    '''
+    """
     :param regions: list of regions
     :param accessKey: access key
     :param secretAccess: secret access key
     :return: list of instances along with cloudwatch stats
-    '''
+    """
     instances = {'Instances':[], 'OwnerId':'', 'Threshold':{'Avg':5, 'Max':30}}
     for region in regions:
         try:
             print("Collecting stats in %s ..." %region)
             ec2Client = boto3.client('ec2', aws_access_key_id=accessKey, aws_secret_access_key=secretAccess, region_name=region)
             cw = boto3.client('cloudwatch', region_name=region, aws_access_key_id=accessKey, aws_secret_access_key=secretAccess)
-        except botocore.exceptions.ClientError as e:
+        except ClientError as e:
             logger.error("Failed to connect %s" %(e.response['Error']['Message']))
             return []
         except:
@@ -100,7 +107,7 @@ def CollectCpuStatsAll(regions, accessKey, secretAccess):
 
         try:
             response = ec2Client.describe_instances(DryRun = False, InstanceIds=[], Filters=[])
-        except botocore.exceptions.ClientError as e:
+        except ClientError as e:
             logger.error("Failed to call describe instances %s" %(e.response['Error']['Message']))
             return []
         except:
@@ -114,7 +121,7 @@ def CollectCpuStatsAll(regions, accessKey, secretAccess):
             for instance in reservation['Instances']:
                 instanceState = instance['State']
                 if instanceState['Name'] != 'terminated':
-                    ec2 = { 'Region':region, 
+                    ec2 = { 'Region':region,
                             'InstanceId': instance['InstanceId'],
                             'InstanceType': instance['InstanceType'],
                             'State': instance['State'],
@@ -123,19 +130,21 @@ def CollectCpuStatsAll(regions, accessKey, secretAccess):
                     instances['Instances'].append(ec2)
     return instances
 
+
 def DatetimeConverter(t):
-    '''
+    """
     Serialize datetime object in stats
-    '''
+    """
     if isinstance(t, datetime.datetime):
         return t.__str__()
 
+
 def SaveObject(obj, prefix, compressed=True):
-    '''
+    """
     Save object as json file
     :param obj: object
     :param prefix: prefix for file
-    '''
+    """
     if not obj:
         return
     suffix = '.json.gz' if compressed else '.json'
@@ -150,6 +159,7 @@ def SaveObject(obj, prefix, compressed=True):
         print("%s saved to %s" %(prefix, fileName))
     except:
         logger.exception("Failed to write result to file")
+
 
 def PrintInstanceRegions(summary):
     if 'Regions' not in summary:
@@ -167,6 +177,7 @@ def PrintInstanceRegions(summary):
     if s:
         print("{}".format(s)) 
 
+
 def PrintInstanceTypes(summary):
     if 'InstanceTypes' not in summary:
         return
@@ -182,6 +193,7 @@ def PrintInstanceTypes(summary):
             s += " | "
     if s:
         print("{}".format(s))
+
 
 def PrintEfficiency(summary):
     if 'Efficiency' not in summary:
@@ -200,6 +212,7 @@ def PrintEfficiency(summary):
             s += " | "
     print(s)
 
+
 def PrintUnderUtilized(summary):
     if 'UnderUtilized' not in summary:
         return
@@ -209,6 +222,7 @@ def PrintUnderUtilized(summary):
     for i in underutilized:
         print("{:20s}:{:10s}".format(i[0], i[1]))
         
+
 def PrintSummary(result):
     if 'Summary' not in result:
         return
@@ -242,6 +256,7 @@ def PrintSummary(result):
     PrintEfficiency(summary)
     PrintUnderUtilized(summary)
 
+
 def GzipStats(instances):
     s = json.dumps(instances,default=DatetimeConverter)
     out = StringIO.StringIO()
@@ -249,13 +264,14 @@ def GzipStats(instances):
       f.write(s)
     return out.getvalue()
 
+
 def AnalyzeStats(instances, url, quiet, threshold):
-    '''
+    """
     Send stats to server and get save result.
     :param instances: ec2 instances with stats
     :param url: server address
     :param quiet: not to print result on screen
-    '''
+    """
     print("Analyzing stats ...")
     headers = {'Content-type': 'application/json', 'content-encoding': 'gzip'}
     instances['Threshold']['Avg'] = int(threshold[0])
@@ -267,12 +283,13 @@ def AnalyzeStats(instances, url, quiet, threshold):
     if not quiet:
         PrintSummary(result)
 
+
 def LoadStatsFile(fileName):
-    '''
+    """
     Load existing stats file
     :param fileName:
     :return:
-    '''
+    """
     try:
         if fileName.endswith('.gz'):
             instances = json.load(gzip.GzipFile(fileName, 'rb'))
@@ -284,12 +301,13 @@ def LoadStatsFile(fileName):
         return []
     return instances
 
+
 def GetCredential(args):
-    '''
+    """
     Try get get credential from 1. command args, 2. botoconfig, 3. user input.
     :param args: command line args
     :return: access_key and secret_access_key
-    '''
+    """
     accessKey, secretAccess = args.accessKey, args.secretAccess
     if accessKey and secretAccess:
         return accessKey, secretAccess
@@ -317,6 +335,7 @@ def GetCredential(args):
 
     return accessKey, secretAccess
 
+
 def ParseArgs(arg):
     parser = argparse.ArgumentParser()
     parser.add_argument("-k", "--access_key", dest="accessKey", help="access key", default='', required=False)
@@ -331,6 +350,7 @@ def ParseArgs(arg):
     args = parser.parse_args()
     return args        
         
+
 if __name__ == "__main__":
 
     args = ParseArgs(sys.argv[1:])
