@@ -44,9 +44,13 @@ REGION_LIST = [
     'us-west-1',       # US West (N. California)
     'us-east-2',       # US East (Ohio)
     ]
+
 SERVER_URL = 'https://customer.fittedcloud.com/v1/ec2stats'    
+
 days = 14
+
 period = 900    # 15 minutes
+
 
 def CollectCpuStats(cw, instanceId, days, period):
     '''
@@ -77,6 +81,7 @@ def CollectCpuStats(cw, instanceId, days, period):
         logger.exception("Failed to call get_metric_statistics")
         return []
     return res
+
 
 def CollectCpuStatsAll(regions, accessKey, secretAccess):
     '''
@@ -123,12 +128,14 @@ def CollectCpuStatsAll(regions, accessKey, secretAccess):
                     instances['Instances'].append(ec2)
     return instances
 
+
 def DatetimeConverter(t):
     '''
     Serialize datetime object in stats
     '''
     if isinstance(t, datetime.datetime):
         return t.__str__()
+
 
 def SaveObject(obj, prefix, compressed=True):
     '''
@@ -151,6 +158,7 @@ def SaveObject(obj, prefix, compressed=True):
     except:
         logger.exception("Failed to write result to file")
 
+
 def PrintInstanceRegions(summary):
     if 'Regions' not in summary:
         return
@@ -167,6 +175,7 @@ def PrintInstanceRegions(summary):
     if s:
         print("{}".format(s)) 
 
+
 def PrintInstanceTypes(summary):
     if 'InstanceTypes' not in summary:
         return
@@ -182,6 +191,7 @@ def PrintInstanceTypes(summary):
             s += " | "
     if s:
         print("{}".format(s))
+
 
 def PrintEfficiency(summary):
     if 'Efficiency' not in summary:
@@ -200,6 +210,7 @@ def PrintEfficiency(summary):
             s += " | "
     print(s)
 
+
 def PrintUnderUtilized(summary):
     if 'UnderUtilized' not in summary:
         return
@@ -209,6 +220,7 @@ def PrintUnderUtilized(summary):
     for i in underutilized:
         print("{:20s}:{:10s}".format(i[0], i[1]))
         
+
 def PrintSummary(result):
     if 'Summary' not in result:
         return
@@ -242,12 +254,14 @@ def PrintSummary(result):
     PrintEfficiency(summary)
     PrintUnderUtilized(summary)
 
+
 def GzipStats(instances):
     s = json.dumps(instances,default=DatetimeConverter)
     out = StringIO.StringIO()
     with gzip.GzipFile(fileobj=out, mode="w") as f:
       f.write(s)
     return out.getvalue()
+
 
 def AnalyzeStats(instances, url, quiet, threshold):
     '''
@@ -267,6 +281,7 @@ def AnalyzeStats(instances, url, quiet, threshold):
     if not quiet:
         PrintSummary(result)
 
+
 def LoadStatsFile(fileName):
     '''
     Load existing stats file
@@ -283,6 +298,7 @@ def LoadStatsFile(fileName):
         logger.exception("Failed to open %s" %fileName)
         return []
     return instances
+
 
 def GetCredential(args):
     '''
@@ -317,6 +333,7 @@ def GetCredential(args):
 
     return accessKey, secretAccess
 
+
 def ParseArgs(arg):
     parser = argparse.ArgumentParser()
     parser.add_argument("-k", "--access_key", dest="accessKey", help="access key", default='', required=False)
@@ -331,6 +348,7 @@ def ParseArgs(arg):
     args = parser.parse_args()
     return args        
         
+
 if __name__ == "__main__":
 
     args = ParseArgs(sys.argv[1:])
